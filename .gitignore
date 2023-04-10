@@ -142,4 +142,4 @@ src/lltm/lltm_cuda.cpp
 src/lltm/lltm.py
 src/lltm/setup.py
 src/lltm/test.py
-models/internimage_t_1k_224.pth
+data/models/internimage_t_1k_224.pth
