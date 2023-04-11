@@ -1,1 +1,2 @@
-from feature_extractor.backbone import InternImage, MLP
+from feature_extractor.backbone import InternImage
+from feature_extractor.test import MNIST_dataset_configure, MNISTransform

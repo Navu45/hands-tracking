@@ -1,6 +1,5 @@
-# Custom
+# IDE
 .vscode
-old
 .idea
 
 # Byte-compiled / optimized / DLL files
@@ -137,9 +136,18 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
-src/lltm/lltm_cuda_kernel.cu
-src/lltm/lltm_cuda.cpp
-src/lltm/lltm.py
-src/lltm/setup.py
-src/lltm/test.py
+
+# Logs and dataset copies
+/data/models/**
 data/models/internimage_t_1k_224.pth
+/lightning_logs/version_0/config.yaml
+/lightning_logs/version_0/events.out.tfevents.1681243306.zephir
+/lightning_logs/version_0/hparams.yaml
+/data/temp/MNIST/raw/t10k-images-idx3-ubyte
+/data/temp/MNIST/raw/t10k-images-idx3-ubyte.gz
+/data/temp/MNIST/raw/t10k-labels-idx1-ubyte
+/data/temp/MNIST/raw/t10k-labels-idx1-ubyte.gz
+/data/temp/MNIST/raw/train-images-idx3-ubyte
+/data/temp/MNIST/raw/train-images-idx3-ubyte.gz
+/data/temp/MNIST/raw/train-labels-idx1-ubyte
+/data/temp/MNIST/raw/train-labels-idx1-ubyte.gz

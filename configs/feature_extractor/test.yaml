@@ -1,0 +1,40 @@
+# pytorch_lightning==2.0.0
+seed_everything: true
+trainer:
+  accelerator: gpu
+  strategy: auto
+  devices: 1
+  max_epochs: 2
+model:
+  cls_scale: 1.2
+  num_classes: 10
+  imsize: 256
+  backbone_params:
+    in_channels: 1
+    embedding_ch: 64
+    out_indices: []
+    depths: [2, 2, 4, 2]
+    groups: [2, 4, 8, 16]
+    drop_path: 0.3
+    drop_rate: 0.25
+    mlp_ratio: 2.5
+    layer_scale: .8
+data:
+  data_dir: "data/temp"
+  batch_size: 16
+  get_data_func:
+    class_path: feature_extractor.MNIST_dataset_configure
+  train_ratio: 0.75
+  transform:
+    class_path: feature_extractor.MNISTransform
+    init_args:
+      size: 256
+optimizer:
+  class_path: torch.optim.AdamW
+  init_args:
+    lr: 5e-4
+lr_scheduler:
+  class_path: torch.optim.lr_scheduler.ExponentialLR
+  init_args:
+    gamma: 0.1
+ckpt_path: "data/models/backbone_mnist.ckpt"
