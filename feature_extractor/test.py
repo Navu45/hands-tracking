@@ -32,20 +32,24 @@ class TestClassifier(pl.LightningModule):
         num_stages = len(backbone_params['depths'])
         num_features = int(backbone_params['embedding_ch'] * 2 ** (num_stages - 1))
         imsize //= 2 ** (num_stages - 2)
-        print(imsize)
         self.backbone = InternImage(**backbone_params)
         self.classifier = nn.Sequential(
             nn.Conv2d(num_features,
-                      int(num_features * cls_scale),
+                      num_features // 4,
                       kernel_size=1,
                       bias=False),
-            build_norm_layer(int(num_features * cls_scale), 'BN',
-                             'channel_first', 'channels_first'),
+            nn.BatchNorm2d(num_features // 4),
+            nn.GELU(),
+            nn.Conv2d(num_features // 4,
+                      num_features // 16,
+                      kernel_size=1,
+                      bias=False),
+            nn.BatchNorm2d(num_features // 16),
             nn.GELU(),
             nn.Flatten(),
-            nn.Linear(int(num_features * cls_scale) * imsize, num_features),
+            nn.Linear(num_features // 16 * imsize, num_features // 16),
             nn.GELU(),
-            nn.Linear(num_features, num_classes),
+            nn.Linear(num_features // 16, num_classes),
         )
         self.criterion = nn.CrossEntropyLoss()
         self.metric = torchmetrics.F1Score(task='multiclass', threshold=0.7, num_classes=10, average='weighted')
@@ -90,7 +94,7 @@ class MNISTransform(nn.Module):
 
 
 def cli_main():
-    cli = LightningCLI(TestClassifier, CustomDataModule)
+    LightningCLI(TestClassifier, CustomDataModule)
 
 
 if __name__ == "__main__":

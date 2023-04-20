@@ -139,7 +139,6 @@ cython_debug/
 
 # Logs and dataset copies
 /data/models/**
-data/models/internimage_t_1k_224.pth
 /lightning_logs/version_0/config.yaml
 /lightning_logs/version_0/events.out.tfevents.1681243306.zephir
 /lightning_logs/version_0/hparams.yaml
@@ -151,3 +150,4 @@ data/models/internimage_t_1k_224.pth
 /data/temp/MNIST/raw/train-images-idx3-ubyte.gz
 /data/temp/MNIST/raw/train-labels-idx1-ubyte
 /data/temp/MNIST/raw/train-labels-idx1-ubyte.gz
+*.egg-info/**

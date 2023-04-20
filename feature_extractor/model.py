@@ -164,22 +164,3 @@ class InternImage(nn.Module):
         if use_middle_steps:
             return seq_out
         return _x
-
-#
-# if __name__ == '__main__':
-#     model = InternImage(
-#         in_channels=3,
-#         embedding_ch=64,
-#         out_indices=[0, 1, 2, 3],
-#         depths=[3, 3, 3, 3],
-#         groups=[1, 2, 4, 8],
-#         post_norm=True,
-#         drop_path=0.3,
-#         drop_rate=0.25,
-#         mlp_ratio=1.0,
-#         layer_scale=.8
-#     )
-#     print(model)
-#     test_tensor = torch.rand(1, 3, 256, 256)
-#     output = model(test_tensor)
-#     print(output)
