@@ -1,8 +1,8 @@
+import copy
 from typing import Optional
 
 import torch
 from torch import nn, Tensor
-import copy
 
 
 def clone(module, N):
@@ -13,7 +13,7 @@ class Transformer(nn.Module):
     def __init__(self,
                  hidden_dim=512,
                  n_heads=8,
-                 n_layers=3,
+                 depth=3,
                  mlp_ratio=0.2,
                  drop_rate=0.25):
         super().__init__()
@@ -21,10 +21,10 @@ class Transformer(nn.Module):
         self.hidden_dim = hidden_dim
 
         encoder_layer = EncoderLayer(hidden_dim, n_heads, drop_rate, mlp_ratio)
-        self.encoder = Encoder(encoder_layer, n_layers, nn.LayerNorm(hidden_dim))
+        self.encoder = Encoder(encoder_layer, depth, nn.LayerNorm(hidden_dim))
 
         decoder_layer = DecoderLayer(hidden_dim, n_heads, drop_rate, mlp_ratio)
-        self.decoder = Decoder(decoder_layer, n_layers, nn.LayerNorm(hidden_dim))
+        self.decoder = Decoder(decoder_layer, depth, nn.LayerNorm(hidden_dim))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -46,10 +46,10 @@ class Transformer(nn.Module):
         cam_features, enc_img_features = e_outputs.split([1, HW], dim=0)
 
         # Transformer Decoder
-        zero_tgt = torch.zeros_like(joint_tokens)  # (num_joints + num_vertices) X batch_size X feature_dim
+        zero_tgt = torch.zeros_like(joint_tokens)  # (num_j + num_v) X batch_size X feature_dim
         joint_features = self.decoder(joint_tokens, enc_img_features, target_mask=attention_mask,
                                       memory_key_padding_mask=mask, pos_encod=pos_encod,
-                                      query_pos=zero_tgt)  # (num_joints + num_vertices) X batch_size X feature_dim
+                                      query_pos=zero_tgt)  # (num_j + num_v) X batch_size X feature_dim
 
         return cam_features, enc_img_features, joint_features
 
@@ -60,9 +60,9 @@ class TransformerLayer(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, decoder_layer, n_layers, norm):
+    def __init__(self, decoder_layer, depth, norm):
         super().__init__()
-        self.layers = clone(decoder_layer, n_layers)
+        self.layers = clone(decoder_layer, depth)
         self.norm = norm
 
     def forward(self, target, memory, **kwargs):
@@ -73,9 +73,9 @@ class Decoder(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, encoder_layer, n_layers, norm):
+    def __init__(self, encoder_layer, depth, norm):
         super().__init__()
-        self.layers = clone(encoder_layer, n_layers)
+        self.layers = clone(encoder_layer, depth)
         self.norm = norm
 
     def forward(self, source, **kwargs):
@@ -113,7 +113,7 @@ class EncoderLayer(nn.Module):
         queries = keys = self.with_pos_encoding(out, pos_encod)
         out = self.attention(queries, keys, value=out,
                              key_padding_mask=key_padding_mask,
-                             attn_mask=attn_mask, need_weights=False)
+                             attn_mask=attn_mask)[0]
         # MLP sublayer
         residual = source + self.dropout1(out)
         out = self.norm2(out)
@@ -156,12 +156,12 @@ class DecoderLayer(nn.Module):
                 query_pos: Optional[Tensor] = None):
         # Self-attention sublayer
         out = self.norm1(target)
-        query = key = self.with_pos_encoding(out, pos_encod)
+        query = key = self.with_pos_encoding(out, query_pos)
         out = self.self_attention(query=query,
                                   key=key,
                                   value=out,
                                   key_padding_mask=key_padding_mask,
-                                  attn_mask=target_mask, need_weights=False)
+                                  attn_mask=target_mask)[0]
 
         # Cross-attention sublayer
         resid = target + self.dropout1(out)
@@ -170,7 +170,7 @@ class DecoderLayer(nn.Module):
                                    key=self.with_pos_encoding(memory, pos_encod),
                                    value=memory,
                                    key_padding_mask=memory_key_padding_mask,
-                                   attn_mask=memory_mask, need_weights=False)
+                                   attn_mask=memory_mask)[0]
         # MLP sublayer
         resid = resid + self.dropout2(out)
         out = self.norm3(resid)

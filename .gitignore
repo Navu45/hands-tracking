@@ -138,16 +138,10 @@ dmypy.json
 cython_debug/
 
 # Logs and dataset copies
-/data/models/**
+/data/models
 /lightning_logs/version_0/config.yaml
 /lightning_logs/version_0/events.out.tfevents.1681243306.zephir
 /lightning_logs/version_0/hparams.yaml
-/data/temp/MNIST/raw/t10k-images-idx3-ubyte
-/data/temp/MNIST/raw/t10k-images-idx3-ubyte.gz
-/data/temp/MNIST/raw/t10k-labels-idx1-ubyte
-/data/temp/MNIST/raw/t10k-labels-idx1-ubyte.gz
-/data/temp/MNIST/raw/train-images-idx3-ubyte
-/data/temp/MNIST/raw/train-images-idx3-ubyte.gz
-/data/temp/MNIST/raw/train-labels-idx1-ubyte
-/data/temp/MNIST/raw/train-labels-idx1-ubyte.gz
+/data/temp
 *.egg-info/**
+/lightning_logs

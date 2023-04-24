@@ -25,7 +25,7 @@ class Stem(nn.Module):
 
 class Downsample(nn.Module):
     def __init__(self,
-                 in_ch: int,):
+                 in_ch: int, ):
         super().__init__()
         self.layer = nn.Sequential(
             # resize channels and downsample input map by 2
@@ -151,7 +151,7 @@ class InternImage(nn.Module):
         ])
         print(self)
 
-    def forward(self, x, use_middle_steps):
+    def forward(self, x, use_middle_steps=True):
         x = self.stem(x)
         x = self.dropout(x)
 
@@ -162,5 +162,5 @@ class InternImage(nn.Module):
             if use_middle_steps and level_idx in self.out_indices:
                 seq_out.append(_x.contiguous())
         if use_middle_steps:
-            return seq_out
+            return seq_out.reverse()
         return _x

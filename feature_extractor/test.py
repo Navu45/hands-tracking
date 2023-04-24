@@ -1,15 +1,13 @@
 import pytorch_lightning as pl
 import torch
 import torchmetrics
-from torch import nn
 from pytorch_lightning.cli import LightningCLI
+from torch import nn
+from torchvision.datasets import MNIST
 from torchvision.transforms import transforms
 
 from data import CustomDataModule
-from torchvision.datasets import MNIST
-
 from feature_extractor import InternImage
-from feature_extractor.deform_conv.modules import build_norm_layer
 
 
 class MNIST_dataset_configure:
@@ -24,7 +22,6 @@ class MNIST_dataset_configure:
 
 class TestClassifier(pl.LightningModule):
     def __init__(self,
-                 cls_scale,
                  imsize,
                  num_classes,
                  backbone_params: dict):
@@ -53,6 +50,7 @@ class TestClassifier(pl.LightningModule):
         )
         self.criterion = nn.CrossEntropyLoss()
         self.metric = torchmetrics.F1Score(task='multiclass', threshold=0.7, num_classes=10, average='weighted')
+
 
     def forward(self, x):
         features = self.backbone(x, False)

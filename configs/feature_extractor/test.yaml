@@ -6,7 +6,6 @@ trainer:
   devices: 1
   max_epochs: 2
 model:
-  cls_scale: 1.2
   num_classes: 10
   imsize: 256
   backbone_params:
