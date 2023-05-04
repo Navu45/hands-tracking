@@ -32,24 +32,29 @@ class Transformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, img_features, cam_token, joint_tokens, pos_encod, attention_mask=None):
-        device = img_features.device
-        HW, B, _ = img_features.shape
+    def forward(self,
+                enc_img_features, cam_token,
+                joint_tokens, pos_encod,
+                extra_img_features=None, attention_mask=None):
+        device = enc_img_features.device
+        HW, B, _ = enc_img_features.shape
         mask = torch.zeros((B, HW), dtype=torch.bool, device=device)
 
         # Transformer Encoder
         zero_mask = torch.zeros((B, 1), dtype=torch.bool, device=device)  # batch_size X 1
         memory_mask = torch.cat([zero_mask, mask], dim=1)  # batch_size X (1 + height * width)
-        cam_with_img = torch.cat([cam_token, img_features], dim=0)  # (1 + height * width) X batch_size X feature_dim
-        e_outputs = self.encoder(cam_with_img, key_padding_mask=memory_mask,
-                                 pos_encod=pos_encod)  # (1 + height * width) X batch_size X feature_dim
+        cam_with_img = torch.cat([cam_token, enc_img_features], dim=0)  # (1 + h * w) X batch_size X feature_dim
+        e_outputs = self.encoder(cam_with_img,
+                                 key_padding_mask=memory_mask,
+                                 pos_encod=pos_encod,
+                                 extra_img_features=extra_img_features)  # (1 + h * w) X batch_size X feature_dim
         cam_features, enc_img_features = e_outputs.split([1, HW], dim=0)
 
         # Transformer Decoder
-        zero_tgt = torch.zeros_like(joint_tokens)  # (num_j + num_v) X batch_size X feature_dim
+        zero_tgt = torch.zeros_like(joint_tokens)  # num_j X batch_size X feature_dim
         joint_features = self.decoder(joint_tokens, enc_img_features, target_mask=attention_mask,
                                       memory_key_padding_mask=mask, pos_encod=pos_encod,
-                                      query_pos=zero_tgt)  # (num_j + num_v) X batch_size X feature_dim
+                                      query_pos=zero_tgt)  # num_j X batch_size X feature_dim
 
         return cam_features, enc_img_features, joint_features
 
@@ -107,7 +112,8 @@ class EncoderLayer(nn.Module):
 
     def forward(self,
                 source, pos_encod=None,
-                key_padding_mask=None, attn_mask=None):
+                key_padding_mask=None, attn_mask=None,
+                extra_img_features=None):
         # Self-attention sublayer
         out = self.norm1(source)
         queries = keys = self.with_pos_encoding(out, pos_encod)
@@ -115,7 +121,7 @@ class EncoderLayer(nn.Module):
                              key_padding_mask=key_padding_mask,
                              attn_mask=attn_mask)[0]
         # MLP sublayer
-        residual = source + self.dropout1(out)
+        residual = source + extra_img_features + self.dropout1(out)
         out = self.norm2(out)
         out = self.mlp(out)
         return residual + self.dropout2(out)
@@ -130,7 +136,8 @@ class DecoderLayer(nn.Module):
         super().__init__()
         # Self-attention sublayer
         self.norm1 = nn.LayerNorm(embed_dim)
-        self.self_attention = nn.MultiheadAttention(embed_dim, n_heads, drop_rate)
+        self.self_attention = nn.MultiheadAttention(embed_dim, n_heads,
+                                                    drop_rate, batch_first=True)
         self.dropout1 = nn.Dropout(drop_rate)
 
         # Cross-attention sublayer
@@ -152,21 +159,19 @@ class DecoderLayer(nn.Module):
                 memory_mask: Optional[Tensor] = None,
                 key_padding_mask: Optional[Tensor] = None,
                 memory_key_padding_mask: Optional[Tensor] = None,
-                pos_encod: Optional[Tensor] = None,
-                query_pos: Optional[Tensor] = None):
+                pos_encod: Optional[Tensor] = None):
         # Self-attention sublayer
-        out = self.norm1(target)
-        query = key = self.with_pos_encoding(out, query_pos)
-        out = self.self_attention(query=query,
-                                  key=key,
+        out = self.norm1(target).permute(1, 2, 0)
+        out = self.self_attention(query=out,
+                                  key=out,
                                   value=out,
                                   key_padding_mask=key_padding_mask,
-                                  attn_mask=target_mask)[0]
+                                  attn_mask=target_mask)[0].permute(2, 0, 1)
 
         # Cross-attention sublayer
         resid = target + self.dropout1(out)
         out = self.norm2(resid)
-        out = self.cross_attention(query=self.with_pos_encoding(out, query_pos),
+        out = self.cross_attention(query=out,
                                    key=self.with_pos_encoding(memory, pos_encod),
                                    value=memory,
                                    key_padding_mask=memory_key_padding_mask,

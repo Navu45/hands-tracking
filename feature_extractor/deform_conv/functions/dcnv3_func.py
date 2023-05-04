@@ -149,7 +149,7 @@ def dcnv3_core_pytorch(
         kernel_w, stride_h, stride_w, pad_h,
         pad_w, dilation_h, dilation_w, group,
         group_channels, offset_scale):
-    # for debug and test.yaml only,
+    # for debug and xtiny_mnist.yaml only,
     # need to use cuda version instead
     input = F.pad(
         input,

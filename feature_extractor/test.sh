@@ -1,3 +1,2 @@
 # Run from root dir
-cd ..
-python -m feature_extractor.test fit --config configs/feature_extractor/test.yaml
+python -m feature_extractor.test fit --config configs/feature_extractor/trainer_mnist.yaml --config configs/feature_extractor/xtiny_mnist.yaml

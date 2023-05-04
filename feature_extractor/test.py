@@ -1,5 +1,4 @@
 import pytorch_lightning as pl
-import torch
 import torchmetrics
 from pytorch_lightning.cli import LightningCLI
 from torch import nn
@@ -7,15 +6,15 @@ from torchvision.datasets import MNIST
 from torchvision.transforms import transforms
 
 from data import CustomDataModule
-from feature_extractor import InternImage
+from feature_extractor import MogaNet
 
 
 class MNIST_dataset_configure:
-    def __call__(self, root, train=False, val=False, download=False,
+    def __call__(self, root, train=False, val=False,
                  test=False, predict=False, transform=None):
-        MNIST(root, download=True)
+        MNIST(root, train=True, download=True)
+        MNIST(root, train=False, download=True)
         return MNIST(root,
-                     download=download,
                      train=(train or val and not test) or not predict,
                      transform=transform)
 
@@ -27,9 +26,9 @@ class TestClassifier(pl.LightningModule):
                  backbone_params: dict):
         super().__init__()
         num_stages = len(backbone_params['depths'])
-        num_features = int(backbone_params['embedding_ch'] * 2 ** (num_stages - 1))
+        num_features = int(backbone_params['widths'][-1])
         imsize //= 2 ** (num_stages - 2)
-        self.backbone = InternImage(**backbone_params)
+        self.backbone = MogaNet(**backbone_params)
         self.classifier = nn.Sequential(
             nn.Conv2d(num_features,
                       num_features // 4,
@@ -53,10 +52,8 @@ class TestClassifier(pl.LightningModule):
 
 
     def forward(self, x):
-        features = self.backbone(x, False)
-        print(features.size())
-        pred = self.classifier(features)
-        print(pred.size())
+        features = self.backbone(x)
+        pred = self.classifier(features[-1])
         return pred
 
     def training_step(self, batch, batch_idx):
@@ -92,9 +89,10 @@ class MNISTransform(nn.Module):
 
 
 def cli_main():
-    LightningCLI(TestClassifier, CustomDataModule)
+    cli = LightningCLI(TestClassifier, CustomDataModule,
+                       parser_kwargs={"default_config_files": ["configs/feature_extractor/trainer_mnist.yaml",
+                                                               "configs/feature_extractor/xtiny_mnist.yaml"]})
 
 
 if __name__ == "__main__":
-    torch.set_float32_matmul_precision('medium')
     cli_main()
