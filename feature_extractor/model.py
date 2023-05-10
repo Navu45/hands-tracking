@@ -3,41 +3,7 @@ import torch
 from timm.models.layers import DropPath
 from torch import nn
 
-
-class LayerNorm2d(nn.LayerNorm):
-    def forward(self, input):
-        """
-        Applies layer normalization and return input with the same size
-
-        :param input: input tensor of size (N, C, H, W)
-        :type input: torch.Tensor
-        """
-        x = input.permute(0, 2, 3, 1)
-        return super().forward(x).permute(0, 3, 1, 2)
-
-
-def build_norm_layer(dim, norm_type='BN'):
-    if norm_type == 'BN':
-        return nn.BatchNorm2d(dim, eps=1e-5)
-    elif norm_type == 'GN':
-        return nn.GroupNorm(dim, dim, eps=1e-5)
-    elif norm_type == 'LN':
-        return LayerNorm2d(dim, eps=1e-6)
-    elif norm_type == 'SBN':
-        return nn.SyncBatchNorm(dim, eps=1e-5)
-    else:
-        raise ValueError('No such norm layer defined!')
-
-
-def build_act_layer(act_type):
-    if act_type == 'SiLU':
-        return nn.SiLU(inplace=True)
-    elif act_type == 'ReLU':
-        return nn.ReLU(inplace=True)
-    elif act_type == 'GELU':
-        return nn.GELU()
-    else:
-        raise ValueError('No such activation defined!')
+from core.ops import build_norm_layer, build_act_layer, SeparableConv2d
 
 
 def split_with_ratio(x: torch.Tensor,
@@ -212,9 +178,8 @@ class ChannelAggregationLayer(nn.Module):
         hidden_dim = int(in_channels * scale)
         self.layer = nn.Sequential(
             nn.BatchNorm2d(in_channels),
-            nn.Conv2d(in_channels, hidden_dim, kernel_size=1),
-            nn.Conv2d(hidden_dim, hidden_dim,
-                      kernel_size=3, padding=1, groups=hidden_dim),
+            SeparableConv2d(in_channels, hidden_dim,
+                            kernel_size=3, depthwise_first=False),
             build_act_layer(act_type),
             nn.Dropout(drop_rate),
             ChannelAggregation(hidden_dim),
@@ -258,7 +223,7 @@ class MogaBlock(nn.Module):
         return residual + self.drop_path(x)
 
 
-class MogaNet(pytorch_lightning.LightningModule):
+class MogaNet(nn.Module):
     def __init__(self,
                  in_channels: int,
                  out_indices: list[int],
@@ -301,8 +266,8 @@ class MogaNet(pytorch_lightning.LightningModule):
         seq_out = []
         for stage_idx, stage in enumerate(self.stages):
             x = stage(x)
-            if stage_idx in self.out_indices:
-                seq_out.append(x.contiguous())
+            if self.use_middle_steps and stage_idx in self.out_indices:
+                seq_out.append(x)
         if self.use_middle_steps:
             return seq_out
         return x

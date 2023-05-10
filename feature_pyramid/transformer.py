@@ -4,12 +4,67 @@ from typing import Optional
 import torch
 from torch import nn, Tensor
 
+from core.ops import build_act_layer, SeparableConv2d
+
 
 def clone(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 
-class Transformer(nn.Module):
+class ConvolutionalProjection(nn.Module):
+    def __init__(self,
+                 in_channels, out_channels, norm_type):
+        super().__init__()
+        self.conv_proj = nn.Sequential(
+            SeparableConv2d(in_channels, out_channels, padding=1, norm_type=norm_type),
+            nn.Flatten(start_dim=2),
+        )
+
+    def forward(self, x):
+        return self.conv_proj(x)
+
+
+class SeparableConvMHA(nn.Module):
+    def __init__(self,
+                 hidden_dim,
+                 norm_type='BN',
+                 value_proj_act_type='ReLU'):
+        super().__init__()
+        # L-projection of latent vector
+        self.latent_proj = nn.Sequential(
+            ConvolutionalProjection(hidden_dim, 1, norm_type),
+            nn.Softmax(dim=2)
+        )
+
+        # keys projection
+        self.keys_proj = ConvolutionalProjection(hidden_dim, hidden_dim, norm_type)
+
+        # values projection
+        self.values_proj = nn.Sequential(
+            ConvolutionalProjection(hidden_dim, hidden_dim, norm_type),
+            build_act_layer(value_proj_act_type)
+        )
+
+        self.pw_conv = nn.Conv2d(hidden_dim, hidden_dim,
+                                 kernel_size=1)
+
+    # @torch.jit.script
+    def forward(self, x):
+        """
+        Applies separable self-attention to input x
+        Args:
+            x (torch.Tensor): tensor of size N, C, H, W
+        Returns:
+            y (torch.Tensor): tensor of the same shape as x
+        """
+        # L, K, V -> (N, 1, K), (N, D, K), (N, D, K) -> D - channels or hidden dim; K == HW; N - batch size
+        latent, keys, values = self.latent_proj(x), self.keys_proj(x), self.values_proj(x)
+        context = torch.einsum('nik,ndj->nid', latent, keys)  # (N, D, 1)
+        context_aware_values = torch.einsum('nd,ndk->ndk', context, values)
+        return self.pw_conv(context_aware_values.reshape(x.shape))
+
+
+class ConvTransformerBlock(nn.Module):
     def __init__(self,
                  hidden_dim=512,
                  n_heads=8,
@@ -57,11 +112,6 @@ class Transformer(nn.Module):
                                       query_pos=zero_tgt)  # num_j X batch_size X feature_dim
 
         return cam_features, enc_img_features, joint_features
-
-
-class TransformerLayer(nn.Module):
-    def __init__(self):
-        super().__init__()
 
 
 class Decoder(nn.Module):
