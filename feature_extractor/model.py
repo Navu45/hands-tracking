@@ -1,9 +1,8 @@
-import pytorch_lightning
 import torch
 from timm.models.layers import DropPath
 from torch import nn
 
-from core.ops import build_norm_layer, build_act_layer, SeparableConv2d
+from core.ops import build_norm_layer, build_act_layer, SeparableConv2d, ElementScale, ConvolutionalMLP
 
 
 def split_with_ratio(x: torch.Tensor,
@@ -25,32 +24,17 @@ class Stem(nn.Module):
                  act_type='GELU'):
         super().__init__()
         self.layer = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels // 2 if double else out_channels, 3, 2, 1),
+            SeparableConv2d(in_channels, out_channels // 2 if double else out_channels, 3, 2, 1),
             build_norm_layer(out_channels // 2 if double else out_channels, norm_type),
             build_act_layer(act_type),
             # Output of first conv is half of second convolution (out_ch // 2 and out_ch)
             nn.Sequential(
-                nn.Conv2d(out_channels // 2, out_channels, 3, 2, 1),
+                SeparableConv2d(out_channels // 2, out_channels, 3, 2, 1),
                 build_norm_layer(out_channels, norm_type)) if double else nn.Identity()
         )
 
     def forward(self, x):
         return self.layer(x)
-
-
-class ElementScale(nn.Module):
-    def __init__(self,
-                 channels,
-                 init_value=0.,
-                 requires_grad=True):
-        super().__init__()
-        self.scale = nn.Parameter(
-            init_value * torch.ones(1, channels, 1, 1),
-            requires_grad=requires_grad
-        )
-
-    def forward(self, x):
-        return x * self.scale
 
 
 class FeatureDecompositionLayer(nn.Module):
@@ -153,44 +137,6 @@ class SpatialAggregationLayer(nn.Module):
         return x + self.moga(self.feature_decompose(self.norm(x)))
 
 
-class ChannelAggregation(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 act_type='GELU'):
-        super().__init__()
-        self.CA = nn.Sequential(
-            nn.Conv2d(in_channels, 1, kernel_size=1),
-            build_act_layer(act_type)
-        )
-        self.sigma = ElementScale(in_channels, requires_grad=True)
-
-    def forward(self, x):
-        return x + self.sigma(x - self.CA(x))
-
-
-class ChannelAggregationLayer(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 scale,
-                 drop_rate,
-                 act_type='GELU'):
-        super().__init__()
-        hidden_dim = int(in_channels * scale)
-        self.layer = nn.Sequential(
-            nn.BatchNorm2d(in_channels),
-            SeparableConv2d(in_channels, hidden_dim,
-                            kernel_size=3, depthwise_first=False),
-            build_act_layer(act_type),
-            nn.Dropout(drop_rate),
-            ChannelAggregation(hidden_dim),
-            nn.Conv2d(hidden_dim, in_channels, kernel_size=1),
-            nn.Dropout(drop_rate)
-        )
-
-    def forward(self, x):
-        return x + self.layer(x)
-
-
 class MogaBlock(nn.Module):
     def __init__(self,
                  in_channels,
@@ -209,10 +155,10 @@ class MogaBlock(nn.Module):
                                                   moga_act_type,
                                                   moga_ratio,
                                                   dilations)
-        self.ffn_block = ChannelAggregationLayer(in_channels,
-                                                 ffn_scale,
-                                                 drop_rate,
-                                                 ffn_act_type, )
+        self.ffn_block = ConvolutionalMLP(in_channels,
+                                          ffn_scale,
+                                          drop_rate,
+                                          ffn_act_type)
 
     def forward(self, x):
         residual = x

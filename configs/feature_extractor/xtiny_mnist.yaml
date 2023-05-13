@@ -1,24 +1,52 @@
 # pytorch_lightning==2.0.0
 model:
   num_classes: 10
-  imsize: 256
+  imsize: 512
   backbone_params:
     in_channels: 1
-    out_indices: [1, 2, 3]
-    depths: [3, 3, 10, 2]
-    widths: [32, 64, 96, 192]
+    out_indices: [ 1, 2, 3 ]
+    depths: [ 3, 3, 10, 2 ]
+    widths: [ 32, 64, 96, 192 ]
     stem_act_type: 'GELU'
-    stem_norm_type: 'LN'
-    moga_ratio: [1, 3, 4]
-    moga_dilations: [1, 2, 3]
+    stem_norm_type: 'BN'
+    moga_ratio: [ 1, 3, 4 ]
+    moga_dilations: [ 1, 2, 3 ]
     drop_path_rate: 0.1
     drop_rate: 0.1
-    ffn_scales: [8, 8, 4, 4]
+    ffn_scales: [ 8, 8, 4, 4 ]
     ffn_act_type: 'GELU'
     fd_act_type: 'GELU'
     moga_act_type: 'SiLU'
 
+trainer:
+  accelerator: gpu
+  strategy: auto
+  devices: 1
+  max_epochs: 2
+  profiler:
+    class_path: pytorch_lightning.profilers.AdvancedProfiler
+    init_args:
+      dirpath: "data/logs"
+      filename: "perf_logs"
 
+lr_scheduler:
+  class_path: torch.optim.lr_scheduler.CosineAnnealingLR
+  init_args:
+    T_max: 200
 
+optimizer:
+  class_path: torch.optim.AdamW
+  init_args:
+    lr: 5e-5
 
-
+data:
+  data_dir: "data/temp"
+  batch_size: 16
+  num_workers: 6
+  get_data_func:
+    class_path: feature_extractor.MNIST_dataset_configure
+  train_ratio: 0.75
+  transform:
+    class_path: feature_extractor.MNISTransform
+    init_args:
+      size: 256

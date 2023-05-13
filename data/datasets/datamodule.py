@@ -32,24 +32,27 @@ class CustomDataModule(pl.LightningDataModule):
                                                       predict=True,
                                                       transform=self.transform)
         if stage == "fit":
-            self.dataset_train = self.get_data_func(self.data_dir,
-                                                    train=True,
-                                                    transform=self.transform)
+            dataset = self.get_data_func(self.data_dir,
+                                         train=True,
+                                         transform=self.transform)
+            train_size = int(len(dataset) * self.train_ratio)
+            val_size = int(len(dataset) * (1 - self.train_ratio))
+            self.dataset_train, self.dataset_val = random_split(dataset, [train_size, val_size])
 
-    def dataloader(self, dataset):
+    def _dataloader(self, dataset):
         return DataLoader(dataset,
                           batch_size=self.batch_size,
                           # num_workers=self.num_workers,
                           pin_memory=True)
 
     def train_dataloader(self):
-        return self.dataloader(self.dataset_train)
+        return self._dataloader(self.dataset_train)
 
     def val_dataloader(self):
-        return self.dataloader(self.dataset_val)
+        return self._dataloader(self.dataset_val)
 
     def test_dataloader(self):
-        return self.dataloader(self.dataset_test)
+        return self._dataloader(self.dataset_test)
 
     def predict_dataloader(self):
-        return self.dataloader(self.dataset_predict)
+        return self._dataloader(self.dataset_predict)

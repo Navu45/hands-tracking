@@ -1,4 +1,7 @@
+import os
+
 import pytorch_lightning as pl
+import torch
 import torchmetrics
 from pytorch_lightning.cli import LightningCLI
 from torch import nn
@@ -12,11 +15,12 @@ from feature_extractor import MogaNet
 class MNIST_dataset_configure:
     def __call__(self, root, train=False, val=False,
                  test=False, predict=False, transform=None):
-        MNIST(root, train=True, download=True)
-        MNIST(root, train=False, download=True)
-        return MNIST(root,
-                     train=(train or val and not test) or not predict,
-                     transform=transform)
+        MNIST(root, download=True)
+        dataset = MNIST(root,
+                        train=(train or val and not test) or not predict,
+                        transform=transform)
+        dataset.data = dataset.data[:3000]
+        return dataset
 
 
 class TestClassifier(pl.LightningModule):
@@ -27,7 +31,7 @@ class TestClassifier(pl.LightningModule):
         super().__init__()
         num_stages = len(backbone_params['depths'])
         num_features = int(backbone_params['widths'][-1])
-        imsize //= 2 ** (num_stages - 2)
+        imsize //= 2 ** (num_stages - 1)
         self.backbone = MogaNet(**backbone_params)
         self.classifier = nn.Sequential(
             nn.Conv2d(num_features,
@@ -49,9 +53,11 @@ class TestClassifier(pl.LightningModule):
         )
         self.criterion = nn.CrossEntropyLoss()
         self.metric = torchmetrics.F1Score(task='multiclass', threshold=0.7, num_classes=10, average='weighted')
-
+        self.to(memory_format=torch.channels_last)
+        self.save_hyperparameters()
 
     def forward(self, x):
+        x = x.to(memory_format=torch.channels_last)
         features = self.backbone(x)
         pred = self.classifier(features[-1])
         return pred
@@ -88,10 +94,13 @@ class MNISTransform(nn.Module):
         return self.transform(x)
 
 
-def cli_main():
-    cli = LightningCLI(TestClassifier, CustomDataModule,
-                       parser_kwargs={"default_config_files": ["configs/feature_extractor/trainer_mnist.yaml",
-                                                               "configs/feature_extractor/xtiny_mnist.yaml"]})
+def cli_main(ckpt_path="data/models/backbone_mnist.ckpt"):
+    cli = LightningCLI(TestClassifier, CustomDataModule, run=False)
+    if os.path.exists(ckpt_path):
+        cli.trainer.fit(cli.model, datamodule=cli.datamodule, ckpt_path=ckpt_path)
+    else:
+        cli.trainer.fit(cli.model, datamodule=cli.datamodule)
+
 
 
 if __name__ == "__main__":
