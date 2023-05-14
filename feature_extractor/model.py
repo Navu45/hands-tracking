@@ -1,3 +1,6 @@
+from typing import Optional
+
+import pytorch_lightning
 import torch
 from timm.models.layers import DropPath
 from torch import nn
@@ -61,12 +64,12 @@ class BranchLayer(nn.Module):
         self.ratio = ratio
         self.branches = nn.ModuleList(branches)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         branch_inputs = split_with_ratio(x, self.ratio, 1)
         branch_outputs = []
-        for i in range(len(self.branches)):
+        for i, branch in enumerate(self.branches):
             branch_outputs.append(
-                self.branches[i](branch_inputs[i])
+                branch(branch_inputs[i])
             )
         return torch.cat(branch_outputs, dim=1)
 
@@ -169,7 +172,7 @@ class MogaBlock(nn.Module):
         return residual + self.drop_path(x)
 
 
-class MogaNet(nn.Module):
+class MogaNet(pytorch_lightning.LightningModule):
     def __init__(self,
                  in_channels: int,
                  out_indices: list[int],
@@ -186,7 +189,6 @@ class MogaNet(nn.Module):
                  fd_act_type: str,
                  moga_act_type: str):
         super().__init__()
-        self.use_middle_steps = len(out_indices) != 0
         self.out_indices = out_indices
         self.stages = nn.ModuleList([
             nn.Sequential(
@@ -212,8 +214,6 @@ class MogaNet(nn.Module):
         seq_out = []
         for stage_idx, stage in enumerate(self.stages):
             x = stage(x)
-            if self.use_middle_steps and stage_idx in self.out_indices:
+            if stage_idx in self.out_indices:
                 seq_out.append(x)
-        if self.use_middle_steps:
-            return seq_out
-        return x
+        return seq_out

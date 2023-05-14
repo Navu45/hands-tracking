@@ -111,9 +111,3 @@ class ConvTransformer(nn.Module):
 
     def forward(self, enc_img_features):
         return self.csp_block(enc_img_features)
-
-
-class ZeroHead(nn.Module):
-    def __init__(self):
-        super().__init__()
-        

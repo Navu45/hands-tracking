@@ -1,0 +1,30 @@
+# pytorch_lightning==2.0.0
+model:
+  in_channels_layers:
+    - [64, 96, 192]
+    - [108, 152, 144]
+  fused_channels_layers:
+    - [216, 304, 288]
+    - [-1, 368, 480]
+  out_channels_layers:
+    - [108, 152, 144]
+    - [108, 184, 240]
+  depths_layers:
+    - [1, 1, 1]
+    - [1, 1, 1]
+  mlp_ratio_layers:
+    - [3, 6, 8]
+    - [2, 3, 4]
+  transformer_norm_type: BN
+  mlp_drop_rate: 0.1
+  mlp_act_type: GELU
+  attn_proj_act_type: ReLU
+  attn_norm_type: BN
+  drop_path_rate: 0.1
+  avg_pool_outputs:
+    - [8, 8]
+    - [4, 4]
+    - [2, 2]
+  num_joints: 21
+  num_classes: 0
+  head_ratio: 4.0
