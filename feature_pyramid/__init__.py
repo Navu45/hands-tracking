@@ -1,1 +1,1 @@
-from model import TransformerFCN
+from feature_pyramid.model import TransformerFCN

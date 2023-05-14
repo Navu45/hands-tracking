@@ -1,7 +1,7 @@
 import torch
 from pytorch_lightning.cli import LightningCLI
 
-from model import TransformerFCN
+from feature_pyramid.model import TransformerFCN
 
 
 class TransformerFCNModule(TransformerFCN):

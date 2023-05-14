@@ -1,1 +1,1 @@
-from model import MogaNet
+from feature_extractor.model import MogaNet

@@ -5,7 +5,7 @@ import torch
 from torch import nn
 
 from core.ops import SeparableConv2d
-from transformer import ConvTransformer
+from feature_pyramid.transformer import ConvTransformer
 
 
 class MultiscaleFusion(nn.Module):
