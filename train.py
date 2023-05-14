@@ -19,8 +19,31 @@ class HandKeypointDetector(pl.LightningModule):
         scheduler = CosineAnnealingLR(optimizer, **self.config['scheduler'])
         return optimizer, scheduler
 
-    def training_step(self):
-        pass
+    def training_step(self, batch, batch_idx):
+        # training_step defines the train loop.
+        x, y = batch
+        img_features = self.backbone(x)
+        outputs = self.head(img_features)
+        loss = self.criterion(outputs, y)
+        self.log("train_loss", loss)
+        return loss
 
+    def validation_step(self, batch, batch_idx):
+        # this is the validation loop
+        x, y = batch
+        img_features = self.backbone(x)
+        outputs = self.head(img_features)
+        print(torch.Tensor(outputs))
+        loss = self.criterion(outputs, y)
+        self.log("val_loss", loss)
+
+    def test_step(self, batch, batch_idx):
+        # this is the test loop
+        x, y = batch
+        img_features = self.backbone(x)
+        outputs = self.head(img_features)
+        print(torch.Tensor(outputs))
+        loss = self.criterion(outputs, y)
+        self.log("test_loss", loss)
 
 

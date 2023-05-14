@@ -1,1 +1,1 @@
-from data.datasets.datamodule import CustomDataModule
+from datasets.datamodule import CustomDataModule

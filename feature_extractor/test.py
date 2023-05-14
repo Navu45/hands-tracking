@@ -9,7 +9,7 @@ from torchvision.datasets import MNIST
 from torchvision.transforms import transforms
 
 from data import CustomDataModule
-from feature_extractor import MogaNet
+from model import MogaNet
 
 
 class MNIST_dataset_configure:

@@ -1,7 +1,7 @@
 import torch
 from pytorch_lightning.cli import LightningCLI
 
-from feature_extractor import MogaNet
+from model import MogaNet
 
 
 class MogaNetModule(MogaNet):

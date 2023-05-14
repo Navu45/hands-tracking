@@ -5,7 +5,7 @@ import torch
 from torch import nn
 
 from core.ops import SeparableConv2d
-from feature_pyramid.transformer import ConvTransformer
+from transformer import ConvTransformer
 
 
 class MultiscaleFusion(nn.Module):
@@ -94,6 +94,12 @@ class MultiScaleFusionTransformerLayer(nn.Module):  # Queen fusion
         return output
 
 
+class ChannelLast(nn.Module):
+    @staticmethod
+    def forward(x):
+        return x.permute(0, 2, 1)
+
+
 class ZeroHead(nn.Module):
     def __init__(self, in_channels_list, avg_pool_outputs, num_joints, num_classes):
         super().__init__()
@@ -108,9 +114,11 @@ class ZeroHead(nn.Module):
             nn.ModuleDict(
                 {
                     task: nn.Sequential(
-                        nn.AdaptiveAvgPool2d(avg_pool_out),
-                        nn.Flatten(start_dim=1),
-                        nn.Linear(avg_pool_out[0] * avg_pool_out[1] * out_features, num_features),
+                        nn.AdaptiveAvgPool2d((avg_pool_out, 2)),
+                        nn.Flatten(start_dim=1, end_dim=-2),
+                        ChannelLast(),
+                        nn.Linear(avg_pool_out * out_features, num_features),
+                        ChannelLast()
                     )
                     for i, (task, num_features) in enumerate(zip(['class', 'keypoints'],
                                                                  [num_classes, num_joints])) if num_features != 0
@@ -124,8 +132,8 @@ class ZeroHead(nn.Module):
         for i, multi_head in enumerate(self.heads):
             for task, head in multi_head.items():
                 if task in multi_head:
-                    output += self.output[task](head(multifusion_x[i]))
-        return output
+                    output += self.output[task](head(multifusion_x[i]).unsqueeze(-1))
+        return torch.mean(torch.cat(output, dim=-1), dim=-1)
 
 
 class TransformerFCN(pytorch_lightning.LightningModule):
@@ -168,7 +176,6 @@ class TransformerFCN(pytorch_lightning.LightningModule):
                                   avg_pool_outputs,
                                   num_joints,
                                   num_classes)
-
 
     def forward(self, multiscale_img_features):
         fcn_outputs = self.fusion_layers(multiscale_img_features)

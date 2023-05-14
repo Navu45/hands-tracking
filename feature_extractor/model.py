@@ -1,5 +1,3 @@
-from typing import Optional
-
 import pytorch_lightning
 import torch
 from timm.models.layers import DropPath

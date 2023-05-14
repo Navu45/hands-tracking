@@ -15,17 +15,14 @@ model:
     - [3, 3, 3]
     - [2, 3, 3]
   mlp_ratio_layers:
+    - [4, 4, 4]
     - [2, 2, 2]
-    - [1, 1, 1]
   transformer_norm_type: BN
   mlp_drop_rate: 0.1
   mlp_act_type: GELU
   attn_proj_act_type: ReLU
   attn_norm_type: BN
   drop_path_rate: 0.1
-  avg_pool_outputs:
-    - [8, 8]
-    - [4, 4]
-    - [2, 2]
+  avg_pool_outputs: [2, 4, 6]
   num_joints: 21
   num_classes: 0
