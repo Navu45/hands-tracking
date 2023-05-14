@@ -1,3 +1,6 @@
+from collections import namedtuple
+
+import pytorch_lightning
 import torch
 from torch import nn
 
@@ -14,12 +17,12 @@ class MultiscaleFusion(nn.Module):
             for i in range(1, len(in_channels_list))
         ])
 
-    def forward(self, multiscale_x: list[torch.Tensor]):
+    def forward(self, multiscale_x: tuple[torch.Tensor]):
         output = [multiscale_x[0]]
-        for i in range(1, len(multiscale_x)):
+        for i, downsampling in enumerate(self.downsampling):
             output.append(torch.cat([
-                multiscale_x[i],
-                self.downsampling[i - 1](multiscale_x[i - 1])
+                multiscale_x[i + 1],
+                downsampling(multiscale_x[i])
             ], dim=1))
         return output
 
@@ -40,16 +43,20 @@ class MultiScaleFusionTransformerLayer(nn.Module):  # Queen fusion
         self.multiscale_fusion = MultiscaleFusion(in_channels_list)
 
         if self.use_down_path:
-            self.updown_path = nn.ModuleList([
+            updown_path = [
                 nn.Conv2d(out_channels, out_channels,
                           kernel_size=3, stride=2, padding=1,
                           groups=out_channels)
                 for out_channels in (out_channels_list[1:]
                                      if not self.use_down_path else
                                      out_channels_list[:-1])
-            ])
+            ]
+            self.updown_path = nn.ModuleList([nn.Identity()] + updown_path)
         else:
-            self.updown_path = nn.UpsamplingNearest2d(scale_factor=2)
+            self.updown_path = nn.ModuleList([
+                nn.UpsamplingNearest2d(scale_factor=2)
+                for _ in range(len(out_channels_list))
+            ])
 
         transformers = [
             ConvTransformer(in_channels, out_channels,
@@ -71,112 +78,99 @@ class MultiScaleFusionTransformerLayer(nn.Module):  # Queen fusion
             transformers.reverse()
         self.transformers = nn.ModuleList(transformers)
 
-    def forward_updown_path(self, index, prev_fusion_out):
-        if self.use_down_path:
-            print(self.updown_path[index], prev_fusion_out.shape)
-            return self.updown_path[index](prev_fusion_out)
-        return self.updown_path(prev_fusion_out)
-
-    def forward(self, multiscale_x: list[torch.Tensor]):
+    def forward(self, multiscale_x: tuple[torch.Tensor]):
         multiscale_x = self.multiscale_fusion(multiscale_x)
         output = []
         if not self.use_down_path:
             multiscale_x.reverse()
-        for i, (fusion_block, img_features) in enumerate(zip(self.transformers, multiscale_x)):
-            x = [img_features]
+        for i, (fusion_block, updown_path) in enumerate(zip(self.transformers, self.updown_path)):
+            x = [multiscale_x[i]]
             if len(output) != 0:
-                x.append(self.forward_updown_path(i - 1, output[-1]))
+                x.append(updown_path(output[-1]))
             x = torch.cat(x, dim=1)
-            print(x.shape)
             output.append(fusion_block(x))
+        if not self.use_down_path:
+            output.reverse()
         return output
 
 
-# down
-# [1 * c, 2 * c, 4 * c],
-# [-1, 4 * c, 7 * c],
-# [c, c, 2 * c],
-# [1, 1, 1],
-# [4, 4, 4],
-
-# up
-# [2 * c, 4 * c, 8 * c],
-# [4 * c, 10 * c, 12 * c],
-# [1 * c, 2 * c, 4 * c],
-# [1, 1, 1],
-# [4, 4, 4],
-
-class Hand3DNet(nn.Module):
-    def __init__(self,
-                 features_sizes: list,
-                 hidden_dims: list,
-                 backbone,
-                 num_layers=3,
-                 num_joints=21,
-                 # num_vertices=195,
-                 n_heads=8,
-                 depth=2,
-                 mlp_ratio=2.0,
-                 drop_rate=0.1):
+class ZeroHead(nn.Module):
+    def __init__(self, in_channels_list, avg_pool_outputs, num_joints, num_classes):
         super().__init__()
-        self.backbone = backbone
-        # self.num_vertices = num_vertices
+        self.tasks = [task for i, (task, out_features) in enumerate(zip(['class', 'keypoints'],
+                                                                        [num_classes, num_joints]))
+                      if out_features != 0]
+        self.output = {
+            task: namedtuple('task', [task])
+            for task in self.tasks
+        }
+        self.heads = nn.ModuleList([
+            nn.ModuleDict(
+                {
+                    task: nn.Sequential(
+                        nn.AdaptiveAvgPool2d(avg_pool_out),
+                        nn.Flatten(start_dim=1),
+                        nn.Linear(avg_pool_out[0] * avg_pool_out[1] * out_features, num_features),
+                    )
+                    for i, (task, num_features) in enumerate(zip(['class', 'keypoints'],
+                                                                 [num_classes, num_joints])) if num_features != 0
+                }
+            )
+            for out_features, avg_pool_out in zip(in_channels_list, avg_pool_outputs)
+        ])
 
+    def forward(self, multifusion_x: list[torch.Tensor]):
+        output = ()
+        for i, multi_head in enumerate(self.heads):
+            for task, head in multi_head.items():
+                if task in multi_head:
+                    output += self.output[task](head(multifusion_x[i]))
+        return output
+
+
+class TransformerFCN(pytorch_lightning.LightningModule):
+    def __init__(self,
+                 in_channels_layers: list[list[int]],
+                 fused_channels_layers: list[list[int]],
+                 out_channels_layers: list[list[int]],
+                 depths_layers: list[list[int]],
+                 mlp_ratio_layers: list[list[int]],
+                 transformer_norm_type='BN',
+                 mlp_drop_rate=0.,
+                 mlp_act_type='GELU',
+                 attn_proj_act_type='ReLU',
+                 attn_norm_type='BN',
+                 drop_path_rate=0.,
+                 avg_pool_outputs=None,
+                 num_joints=21,
+                 num_classes=None):
+        super().__init__()
         # build transformers
-        self.transformers = nn.ModuleList([
-            Transformer(hidden_dim=hidden_dims[i],
-                        n_heads=n_heads,
-                        depth=depth,
-                        mlp_ratio=mlp_ratio,
-                        drop_rate=drop_rate)
-            for i in range(num_layers)
+        self.fusion_layers = nn.Sequential(*[
+            MultiScaleFusionTransformerLayer(
+                in_channels_list, fused_channels_list, out_channels_list,
+                depths, mlp_ratios,
+                path='up' if i % 2 == 0 else 'down',
+                transformer_norm_type=transformer_norm_type,
+                mlp_drop_rate=mlp_drop_rate,
+                mlp_act_type=mlp_act_type,
+                attn_proj_act_type=attn_proj_act_type,
+                attn_norm_type=attn_norm_type,
+                drop_path_rate=drop_path_rate
+            )
+            for i, (in_channels_list, fused_channels_list, out_channels_list, depths, mlp_ratios)
+            in enumerate(zip(in_channels_layers,
+                             fused_channels_layers,
+                             out_channels_layers,
+                             depths_layers, mlp_ratio_layers))
         ])
+        self.zero_head = ZeroHead(out_channels_layers[-1],
+                                  avg_pool_outputs,
+                                  num_joints,
+                                  num_classes)
 
-        # self.pos_encodings = nn.ModuleList([
-        #     build_position_encoding(pos_type='sine', hidden_dim=hidden_dims[i])
-        #     for i in range(num_layers)
-        # ])
 
-        # Conv 1x1
-        self.conv_1x1 = nn.ModuleList([
-            nn.Conv2d(features_sizes[i], hidden_dims[i], kernel_size=1)
-            for i in range(num_layers)
-        ])
-
-    def forward(self, images):
-        device = images.device
-        batch_size = images.size(0)
-
-        # preparation
-        cam_token = self.cam_token_embed.weight.unsqueeze(1).repeat(1, batch_size, 1)  # 1 X batch_size X 512
-        joint_tokens = self.joint_token_embed.weight.unsqueeze(1).repeat(1, batch_size, 1)  # num_j X batch_size X 512
-
-        # extract image features through a CNN backbone
-        img_features_list = self.backbone(images)  # batch_size X 2048 X h X w
-        cam_features, enc_img_features, joint_features = None, None, None
-        for i, img_features in enumerate(img_features_list):
-            _, _, h, w = img_features.shape
-            img_features = self.conv_1x1[i](img_features).flatten(2).permute(2, 0, 1)  # (h * w) X batch_size X f_size
-            if i == 0:
-                enc_img_features = img_features
-            else:
-                enc_img_features = torch.cat([enc_img_features, img_features], dim=0)
-
-            # positional encodings
-            pos_enc = self.pos_encodings[i](batch_size, h, w,
-                                            device).flatten(2).permute(2, 0, 1)  # (h * w) X batch_size X hid_dim[i]
-
-            # transformer encoder-decoder
-            cam_features, enc_img_features, joint_features = self.transformers[i](enc_img_features, cam_token,
-                                                                                  joint_tokens,
-                                                                                  pos_enc, )
-            # progressive dimensionality reduction
-            cam_features = self.dim_reduce_enc_cam[i](cam_features)  # 1 X batch_size X hid_dim[i + 1]
-            enc_img_features = self.dim_reduce_enc_img[i](enc_img_features)  # (h * w) X batch_size X hid_dim[i + 1]
-            joint_features = self.dim_reduce_dec[i](joint_features)  # num_j X batch_size X hid_dim[i + 1]
-
-        # estimators
-        pred_cam = self.cam_predictor(cam_features).view(batch_size, 3)  # batch_size X 3
-        pred_3d_joints = self.xyz_regressor(joint_features.transpose(0, 1))  # batch_size X num_joints X 3
-
-        return {'pred_cam': pred_cam, 'pred_3d_joints': pred_3d_joints}
+    def forward(self, multiscale_img_features):
+        fcn_outputs = self.fusion_layers(multiscale_img_features)
+        outputs = self.zero_head(fcn_outputs)
+        return outputs

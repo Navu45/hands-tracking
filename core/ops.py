@@ -80,8 +80,8 @@ class CSPBlock(nn.Module):
                                  kernel_size=1)
         self.dense_block = dense_block
 
-    def forward(self, x, **dense_block_args):
-        return self.branch1(x) + self.dense_block(self.branch2(x), **dense_block_args)
+    def forward(self, x):
+        return self.branch1(x) + self.dense_block(self.branch2(x))
 
 
 class ElementScale(nn.Module):

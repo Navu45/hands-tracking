@@ -145,3 +145,5 @@ cython_debug/
 /data/temp
 *.egg-info/**
 /lightning_logs
+/data/logs/
+/data/mano/
