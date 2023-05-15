@@ -147,3 +147,5 @@ cython_debug/
 /lightning_logs
 /data/logs/
 /data/mano/
+/data/freihand/
+/wandb/

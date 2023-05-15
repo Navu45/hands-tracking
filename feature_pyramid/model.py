@@ -106,10 +106,6 @@ class ZeroHead(nn.Module):
         self.tasks = [task for i, (task, out_features) in enumerate(zip(['class', 'keypoints'],
                                                                         [num_classes, num_joints]))
                       if out_features != 0]
-        self.output = {
-            task: namedtuple('task', [task])
-            for task in self.tasks
-        }
         self.heads = nn.ModuleList([
             nn.ModuleDict(
                 {
@@ -130,9 +126,8 @@ class ZeroHead(nn.Module):
     def forward(self, multifusion_x: list[torch.Tensor]):
         output = ()
         for i, multi_head in enumerate(self.heads):
-            for task, head in multi_head.items():
-                if task in multi_head:
-                    output += self.output[task](head(multifusion_x[i]).unsqueeze(-1))
+            for _, head in multi_head.items():
+                output += (head(multifusion_x[i]).unsqueeze(-1), )
         return torch.mean(torch.cat(output, dim=-1), dim=-1)
 
 

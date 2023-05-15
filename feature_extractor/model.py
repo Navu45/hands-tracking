@@ -211,5 +211,5 @@ class MogaNet(pytorch_lightning.LightningModule):
         for stage_idx, stage in enumerate(self.stages):
             x = stage(x)
             if stage_idx in self.out_indices:
-                seq_out += (x, )
+                seq_out += (x,)
         return seq_out
