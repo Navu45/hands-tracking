@@ -8,11 +8,43 @@ def clone(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 
+class LayerNorm2d(nn.Module):
+    r""" LayerNorm that supports two data formats: channels_last (default) or channels_first.
+    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with
+    shape (batch_size, height, width, channels) while channels_first corresponds to inputs
+    with shape (batch_size, channels, height, width).
+    """
+
+    def __init__(self,
+                 normalized_shape,
+                 eps=1e-6,
+                 data_format="channels_last"):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(normalized_shape))
+        self.eps = eps
+        self.data_format = data_format
+        assert self.data_format in ["channels_last", "channels_first"]
+        self.normalized_shape = (normalized_shape,)
+
+    def forward(self, x):
+        if self.data_format == "channels_last":
+            return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        elif self.data_format == "channels_first":
+            u = x.mean(1, keepdim=True)
+            s = (x - u).pow(2).mean(1, keepdim=True)
+            x = (x - u) / torch.sqrt(s + self.eps)
+            x = self.weight[:, None, None] * x + self.bias[:, None, None]
+            return x
+
+
 def build_norm_layer(dim, norm_type='BN'):
     if norm_type == 'BN':
         return nn.BatchNorm2d(dim, eps=1e-5)
     elif norm_type == 'GN':
         return nn.GroupNorm(dim, dim, eps=1e-5)
+    elif norm_type == 'LN':
+        return LayerNorm2d(dim, eps=1e-5, data_format='channels_first')
     else:
         return nn.Identity()
 
