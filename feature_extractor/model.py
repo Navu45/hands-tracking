@@ -168,7 +168,7 @@ class MogaBlock(nn.Module):
         return residual + self.drop_path(x)
 
 
-class MogaNet(pytorch_lightning.LightningModule):
+class MogaNet(nn.Module):
     def __init__(self,
                  in_channels: int,
                  out_indices: list[int],
@@ -207,9 +207,9 @@ class MogaNet(pytorch_lightning.LightningModule):
         ])
 
     def forward(self, x):
-        seq_out = tuple()
+        seq_out = list()
         for stage_idx, stage in enumerate(self.stages):
             x = stage(x)
             if stage_idx in self.out_indices:
-                seq_out += (x,)
+                seq_out.append(x)
         return seq_out

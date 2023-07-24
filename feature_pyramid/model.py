@@ -1,6 +1,3 @@
-from collections import namedtuple
-
-import pytorch_lightning
 import torch
 from torch import nn
 
@@ -17,7 +14,7 @@ class MultiscaleFusion(nn.Module):
             for i in range(1, len(in_channels_list))
         ])
 
-    def forward(self, multiscale_x: tuple[torch.Tensor]):
+    def forward(self, multiscale_x: list[torch.Tensor]):
         output = [multiscale_x[0]]
         for i, downsampling in enumerate(self.downsampling):
             output.append(torch.cat([
@@ -78,7 +75,7 @@ class MultiScaleFusionTransformerLayer(nn.Module):  # Queen fusion
             transformers.reverse()
         self.transformers = nn.ModuleList(transformers)
 
-    def forward(self, multiscale_x: tuple[torch.Tensor]):
+    def forward(self, multiscale_x: list[torch.Tensor]):
         multiscale_x = self.multiscale_fusion(multiscale_x)
         output = []
         if not self.use_down_path:
@@ -131,7 +128,7 @@ class ZeroHead(nn.Module):
         return torch.mean(torch.cat(output, dim=-1), dim=-1)
 
 
-class TransformerFCN(pytorch_lightning.LightningModule):
+class TransformerFCN(nn.Module):
     def __init__(self,
                  in_channels_layers: list[list[int]],
                  fused_channels_layers: list[list[int]],
